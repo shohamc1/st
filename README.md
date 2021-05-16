@@ -8,7 +8,9 @@ My attempt at creating a X11 terminal emulator.
 ### Install Prerequisites
 
 To build the project, you will need the X11 development headers.
+
 Arch: `# pacman -S libx11`
+
 Debian: `# apt install libx11`
 
 ### Build and Run
