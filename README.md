@@ -23,6 +23,9 @@ cd st
 make clean install
 ```
 
-To only build: `make build`
-To only run: `make run`
-Clean files: `make clean`
+Other `make` commands
+|Objective | Command |
+| --- | --- |
+| build executable | `make build` |
+| run executable | `make run` |
+| clean files | `make clean` |

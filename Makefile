@@ -1,6 +1,3 @@
-LDLIBS += `pkg-config --libs x11`
-CFLAGS += -std=c99 -Wall -Wextra `pkg-config --cflags x11`
-
 install:
 	make build
 	make run
