@@ -184,6 +184,177 @@ bool term_set_size(struct PTY *pty, struct X11 *x11)
 bool spawn(struct PTY *pty)
 {
     // spawn slave terminal
+    pid_t pid;
+    char *env[] = {"TERM-dumb", NULL};
+
+    pid = fork();
+    if (pid == 0)
+    {
+        close(pty->master);
+
+        // create new session and this the controlling terminal
+        setsid();
+
+        if (ioctl(pty->slave, TIOCSCTTY, NULL) == -1)
+        {
+            perror("ioctl(TIOCSCTTY)");
+            return false;
+        }
+
+        dup2(pty->slave, 0);
+        dup2(pty->slave, 1);
+        dup2(pty->slave, 2);
+        close(pty->slave);
+
+        execle(SHELL, "-", SHELL, (char *)NULL, env);
+        return false;
+    }
+    else if (pid > 0)
+    {
+        close(pty->slave);
+        return true;
+    }
+    perror("fork()");
+    return false;
+}
+
+void x11_redraw(struct X11 *x11)
+{
+    int x, y;
+    char buf[1];
+
+    XSetForeground(x11->display, x11->termgc, x11->col_bg);
+    XFillRectangle(x11->display, x11->terminal_window, x11->termgc, 0, 0, x11->w, x11->h);
+
+    XSetForeground(x11->display, x11->termgc, x11->col_fg);
+    for (y = 0; y < x11->buf_h; y++)
+    {
+        for (x = 0; x < x11->buf_w; x++)
+        {
+            buf[0] = x11->buf[y * x11->buf_w + x];
+            if (!iscntrl(buf[0]))
+            {
+                XDrawString(x11->display, x11->terminal_window,
+                            x11->termgc, x * x11->font_width,
+                            y * x11->font_height + x11->xfont->ascent,
+                            buf, 1);
+            }
+        }
+    }
+
+    XSetForeground(x11->display, x11->termgc, x11->col_fg);
+    XFillRectangle(x11->display, x11->terminal_window, x11->termgc, x11->buf_x * x11->font_width, x11->buf_y * x11->font_height, x11->font_width, x11->font_height);
+
+    XSync(x11->display, False);
+}
+
+void x11_key(XKeyEvent *ev, struct PTY *pty)
+{
+    char buf[32];
+    int i, num;
+    KeySym keysym;
+
+    num = XLookupString(ev, buf, sizeof buf, &keysym, 0);
+    for (i = 0; i < num; i++)
+        write(pty->master, &buf[i], 1);
+}
+
+int run(struct PTY *pty, struct X11 *x11)
+{
+    int i, maxfd;
+    fd_set readable;
+    XEvent xevent;
+    char buf[1];
+    bool just_wrapped = false;
+
+    maxfd = pty->master > x11->fd ? pty->master : x11->fd;
+
+    for (;;)
+    {
+        FD_ZERO(&readable);
+        FD_SET(pty->master, &readable);
+        FD_SET(x11->fd, &readable);
+
+        if (select(maxfd + 1, &readable, NULL, NULL, NULL) == -1)
+        {
+            perror("select");
+            return 1;
+        }
+
+        if (FD_ISSET(pty->master, &readable))
+        {
+            if (read(pty->master, buf, sizeof buf) <= 0)
+            {
+                // child is exiting
+                fprintf(stderr, "Nothing to read from child\n");
+                return 1;
+            }
+
+            if (buf[0] == '\r')
+            {
+                // move cursor to first column
+                x11->buf_x = 0;
+            }
+            else
+            {
+                if (buf[0] != '\n')
+                {
+                    // regular byte, store and move to the right
+                    x11->buf[x11->buf_y * x11->buf_w + x11->buf_x] = buf[0];
+                    x11->buf_x++;
+
+                    if (x11->buf_x >= x11->buf_w)
+                    {
+                        // overflow to next line
+                        x11->buf_x = 0;
+                        x11->buf_y++;
+                        just_wrapped = true;
+                    }
+                    else
+                        just_wrapped = false;
+                }
+                else if (!just_wrapped)
+                {
+                    // new line is read (not from overflow)
+                    x11->buf_y++;
+                    just_wrapped = false;
+                }
+
+                if (x11->buf_y >= x11->buf_h)
+                {
+                    // we have hit bottom of the window
+                    // scroll down one line to fit content
+
+                    memmove(x11->buf, &x11->buf[x11->buf_w], x11->buf_w * (x11->buf_h - 1));
+                    x11->buf_y = x11->buf_h - 1;
+
+                    for (i = 0; i < x11->buf_w; i++)
+                        x11->buf[x11->buf_y * x11->buf_w + i] = 0; // clear new line
+                }
+            }
+
+            x11_redraw(x11);
+        }
+
+        if (FD_ISSET(x11->fd, &readable))
+        {
+            while (XPending(x11->display))
+            {
+                XNextEvent(x11->display, &xevent);
+                switch (xevent.type)
+                {
+                case Expose:
+                    x11_redraw(x11);
+                    break;
+                case KeyPress:
+                    x11_key(&xevent.xkey, pty);
+                    break;
+                }
+            }
+        }
+    }
+
+    return 0;
 }
 
 int main()
@@ -203,5 +374,5 @@ int main()
     if (!spawn(&pty))
         return 1;
 
-    sleep(10);
+    return run(&pty, &x11);
 }
