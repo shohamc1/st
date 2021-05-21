@@ -3,7 +3,9 @@
 My attempt at creating a X11 terminal emulator.
 [Inspired by this blog post.](https://www.uninformativ.de/blog/postings/2018-02-24/0/POSTING-en.html)
 
-![Screenshot](./screenshot.png)
+|            Debian             |            Fedora             |
+| :---------------------------: | :---------------------------: |
+| ![](./screenshots/debian.png) | ![](./screenshots/fedora.png) |
 
 ## How to run
 
