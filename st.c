@@ -185,7 +185,7 @@ bool spawn(struct PTY *pty)
 {
     // spawn slave terminal
     pid_t pid;
-    char *env[] = {"TERM-dumb", NULL};
+    char *env[] = {"TERM=dumb", NULL};
 
     pid = fork();
     if (pid == 0)
@@ -206,7 +206,7 @@ bool spawn(struct PTY *pty)
         dup2(pty->slave, 2);
         close(pty->slave);
 
-        execle(SHELL, "-", SHELL, (char *)NULL, env);
+        execle(SHELL, "-" SHELL, (char *)NULL, env);
         return false;
     }
     else if (pid > 0)
@@ -243,7 +243,10 @@ void x11_redraw(struct X11 *x11)
     }
 
     XSetForeground(x11->display, x11->termgc, x11->col_fg);
-    XFillRectangle(x11->display, x11->terminal_window, x11->termgc, x11->buf_x * x11->font_width, x11->buf_y * x11->font_height, x11->font_width, x11->font_height);
+    XFillRectangle(x11->display, x11->terminal_window, x11->termgc,
+                   x11->buf_x * x11->font_width,
+                   x11->buf_y * x11->font_height,
+                   x11->font_width, x11->font_height);
 
     XSync(x11->display, False);
 }
@@ -283,10 +286,11 @@ int run(struct PTY *pty, struct X11 *x11)
 
         if (FD_ISSET(pty->master, &readable))
         {
-            if (read(pty->master, buf, sizeof buf) <= 0)
+            if (read(pty->master, buf, 1) <= 0)
             {
                 // child is exiting
                 fprintf(stderr, "Nothing to read from child\n");
+                perror(NULL);
                 return 1;
             }
 
