@@ -294,47 +294,49 @@ int run(struct PTY *pty, struct X11 *x11)
                 return 1;
             }
 
-            if (buf[0] == '\r')
+            switch (buf[0])
             {
-                // move cursor to first column
+            case '\r':
+                // carriage return, move cursor to first column
                 x11->buf_x = 0;
-            }
-            else
-            {
-                if (buf[0] != '\n')
-                {
-                    // regular byte, store and move to the right
-                    x11->buf[x11->buf_y * x11->buf_w + x11->buf_x] = buf[0];
-                    x11->buf_x++;
-
-                    if (x11->buf_x >= x11->buf_w)
-                    {
-                        // overflow to next line
-                        x11->buf_x = 0;
-                        x11->buf_y++;
-                        just_wrapped = true;
-                    }
-                    else
-                        just_wrapped = false;
-                }
-                else if (!just_wrapped)
+                break;
+            case '\b':
+                x11->buf_x = x11->buf_x - 1;
+                break;
+            case '\n':
+                if (!just_wrapped)
                 {
                     // new line is read (not from overflow)
                     x11->buf_y++;
                     just_wrapped = false;
                 }
+                break;
+            default:
+                // regular byte, store and move to the right
+                x11->buf[x11->buf_y * x11->buf_w + x11->buf_x] = buf[0];
+                x11->buf_x++;
 
-                if (x11->buf_y >= x11->buf_h)
+                if (x11->buf_x >= x11->buf_w)
                 {
-                    // we have hit bottom of the window
-                    // scroll down one line to fit content
-
-                    memmove(x11->buf, &x11->buf[x11->buf_w], x11->buf_w * (x11->buf_h - 1));
-                    x11->buf_y = x11->buf_h - 1;
-
-                    for (i = 0; i < x11->buf_w; i++)
-                        x11->buf[x11->buf_y * x11->buf_w + i] = 0; // clear new line
+                    // overflow to next line
+                    x11->buf_x = 0;
+                    x11->buf_y++;
+                    just_wrapped = true;
                 }
+                else
+                    just_wrapped = false;
+            }
+
+            if (x11->buf_y >= x11->buf_h)
+            {
+                // we have hit bottom of the window
+                // scroll down one line to fit content
+
+                memmove(x11->buf, &x11->buf[x11->buf_w], x11->buf_w * (x11->buf_h - 1));
+                x11->buf_y = x11->buf_h - 1;
+
+                for (i = 0; i < x11->buf_w; i++)
+                    x11->buf[x11->buf_y * x11->buf_w + i] = 0; // clear new line
             }
 
             x11_redraw(x11);
